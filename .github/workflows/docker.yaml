@@ -1,0 +1,81 @@
+name: Docker Image
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - v*
+  schedule:
+    # Runs "every Monday" (see https://crontab.guru)
+    - cron: '0 0 * * MON'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Log in to GitHub Docker Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          logout: false
+
+      - name: Log in to DockerHub Registry
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Get latest YesPlayMusic version
+        run: |
+          YESPLAYMUSIC_VERSION=$(curl -s https://api.github.com/repos/qier222/YesPlayMusic/releases/latest | jq -r '.tag_name')
+          echo "Latest YesPlayMusic version: $YESPLAYMUSIC_VERSION"
+          echo YESPLAYMUSIC_VERSION=$YESPLAYMUSIC_VERSION >> $GITHUB_ENV
+
+      - name: Check out Git repository
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+
+      - name: Check if the image exists
+        run: |
+          GHCR_TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $GHCR_TOKEN" \
+            https://ghcr.io/v2/${{ github.repository }}/manifests/${{ env.YESPLAYMUSIC_VERSION }}
+            )
+          IMAGE_EXISTS=$(if [ $HTTP_CODE -eq 200 ]; then echo "true"; else echo "false"; fi)
+          echo "HTTP code: $HTTP_CODE, Image exists: $IMAGE_EXISTS"
+          echo IMAGE_EXISTS=$IMAGE_EXISTS >> $GITHUB_ENV
+
+      - name: Set up QEMU
+        if: ${{ env.IMAGE_EXISTS == 'false' || github.event_name != 'schedule' }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: ${{ env.IMAGE_EXISTS == 'false' || github.event_name != 'schedule' }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: ${{ env.IMAGE_EXISTS == 'false' || github.event_name != 'schedule' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64, linux/arm64
+          push: true
+          tags: |
+            edu9527/yesplaymusic:${{ env.YESPLAYMUSIC_VERSION }}
+            edu9527/yesplaymusic:latest
+            edu9527/yesplaymusic:${{ github.sha }}
+            ghcr.io/${{ github.actor }}/yesplaymusic:${{ env.YESPLAYMUSIC_VERSION }}
+            ghcr.io/${{ github.actor }}/yesplaymusic:latest
+          build-args: |
+            MUSIC_VERSION=${{ env.YESPLAYMUSIC_VERSION }}

@@ -12,7 +12,7 @@ FROM nginx:1.20.2-alpine AS app
 COPY --from=build /app/package.json /usr/local/lib/
 
 RUN apk add --no-cache libuv nodejs npm \
-  && npm i -g $(awk -F \" '{if($2=="@neteaseapireborn/api@latest") print $2"@"$4}' /usr/local/lib/package.json) \
+  && npm i -g $(awk -F \" '{if($2=="@neteaseapireborn/api") print $2"@"$4}' /usr/local/lib/package.json) \
   && rm -f /usr/local/lib/package.json
 
 COPY --from=build /app/docker/nginx.conf.example /etc/nginx/conf.d/default.conf

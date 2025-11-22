@@ -1,19 +1,20 @@
+## builder
 FROM node:16.13.1-alpine AS build
+
 ENV VUE_APP_NETEASE_API_URL=/api
+
 WORKDIR /app
-RUN apk add --no-cache python3 make g++ git
-COPY package.json yarn.lock ./
-RUN yarn install
+
 COPY . .
-RUN yarn build
 
-FROM nginx:1.20.2-alpine AS app
+RUN apk add --no-cache python3 make g++ git \
+    && yarn install --frozen-lockfile \
+    && yarn build
 
-COPY --from=build /app/package.json /usr/local/lib/
+## app
+FROM node:22-alpine AS app
 
-RUN apk add --no-cache libuv nodejs npm \
-  && npm i -g $(awk -F \" '{if($2=="@neteaseapireborn/api") print $2"@"$4}' /usr/local/lib/package.json) \
-  && rm -f /usr/local/lib/package.json
+RUN apk add --no-cache nginx && npm i -g @neteasecloudmusicapienhanced/api
 
 COPY --from=build /app/docker/nginx.conf.example /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html

@@ -1,11 +1,6 @@
 name: Docker Image
 
 on:
-  push:
-    branches:
-      - master
-    tags:
-      - v*
   schedule:
     # Runs "every Monday" (see https://crontab.guru)
     - cron: '0 0 * * MON'
@@ -15,47 +10,22 @@ permissions:
   contents: read
   packages: write
 
+# 避免并发构建
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  sync_latest_from_upstream:
-    name: Sync latest commits from upstream repo
-    runs-on: ubuntu-latest
-    if: ${{ github.event.repository.fork }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Clean issue notice
-        uses: actions-cool/issues-helper@v3
-        with:
-          actions: 'close-issues'
-          labels: '🚨 Sync Fail'
-
-      - name: Sync upstream changes
-        id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
-        with:
-          upstream_sync_repo: qier222/YesPlayMusic
-          upstream_sync_branch: master
-          target_sync_branch: master
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }} # automatically generated, no need to set
-          test_mode: false
-
-      - name: Sync check
-        if: failure()
-        uses: actions-cool/issues-helper@v3
-        with:
-          actions: 'create-issue'
-          title: '🚨 同步失败 | Sync Fail'
-          labels: '🚨 Sync Fail'
-          body: |
-            Due to a change in the workflow file of the upstream repository, GitHub has automatically suspended the scheduled automatic update. You need to manually sync your fork.
-
-            由于上游仓库的 workflow 文件变更，导致 GitHub 自动暂停了本次自动更新，你需要手动 Sync Fork 一次。
-
-  build:
+  build-image:
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Log in to DockerHub Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
       - name: Log in to GitHub Docker Registry
         uses: docker/login-action@v3
         with:
@@ -64,12 +34,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           logout: false
 
-      - name: Log in to DockerHub Registry
-        uses: docker/login-action@v3
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
       - name: Get latest YesPlayMusic version
         run: |
           YESPLAYMUSIC_VERSION=$(curl -s https://api.github.com/repos/qier222/YesPlayMusic/releases/latest | jq -r '.tag_name')
@@ -77,7 +41,7 @@ jobs:
           echo YESPLAYMUSIC_VERSION=$YESPLAYMUSIC_VERSION >> $GITHUB_ENV
 
       - name: Check out Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           submodules: 'recursive'
 
@@ -105,6 +69,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile.new
           platforms: linux/amd64, linux/arm64
           push: true
           tags: |

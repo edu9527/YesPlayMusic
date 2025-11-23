@@ -75,7 +75,6 @@ jobs:
           tags: |
             edu9527/yesplaymusic:${{ env.YESPLAYMUSIC_VERSION }}
             edu9527/yesplaymusic:latest
-            edu9527/yesplaymusic:${{ github.sha }}
             ghcr.io/${{ github.actor }}/yesplaymusic:${{ env.YESPLAYMUSIC_VERSION }}
             ghcr.io/${{ github.actor }}/yesplaymusic:latest
           build-args: |
